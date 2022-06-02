@@ -1,4 +1,4 @@
-﻿/*Gino Murin - Module 4 Milestone
+﻿/*Gino Murin - 3D Modeling Using OpenGL
 * The following code expands on previous iterations by implementing
 * the following changes:
 *
