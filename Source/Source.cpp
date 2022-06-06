@@ -2,16 +2,14 @@
 * The following code expands on previous iterations by implementing
 * the following changes:
 *
-* --A table plane has been added
-* --"WASD" keys are mapped to camera movement to navigate through the scene.
-* --Mouse movement is mapped to orientation to handle the direction of movement.
-* --Mouse scrolling will increase/decrease the speed of movement.
-* --Q and E Keys move the camera directly up and down respectively.
-* --P Key switches between perspective and orthogonal projection views (2D/3D)
+* --Created two seperate textures on the laptop
+* screen to texture the front and back.
 *
-* These changes are implemented through event listeners and callback functions.
-* Rendering logic has also been modified to provide for the addition feature of
-* 2D rendering using glm's ortho() function.
+* These changes were implemented by:
+* 1. Updating the fragment shader with a second texture container
+* 2. Loading the second texture from file
+* 3. Loading both the first and second texture into our shader program
+* 4. Rendering the mesh with the second texture
 */
 
 #include <iostream>         // cout, cerr
@@ -133,9 +131,7 @@ uniform bool multipleTextures;
 
 void main()
 {
-    fragmentColor = texture(ourTexture, TexCoord);
-    vec4 extraTexture = texture(uExtraTexture, TexCoord);
-    fragmentColor = extraTexture;
+    fragmentColor = mix(texture(ourTexture, TexCoord), texture(uExtraTexture, TexCoord), 1.0);
    
 }
 );
@@ -914,12 +910,26 @@ void RenderTable() {
 
 // loads vertex, index, and color data into for laptop lid into mesh
 void CreateLaptopScreen(GLMesh& screenMesh) {
-    // Position and Color data
+
+    //// Position and Color data
+    //GLfloat verts[] = {
+    //    // Vertex Positions    
+    //     0.5f,  0.02f, 0.0f,   1.0f, 1.0f,
+    //     0.5f, -0.02f, 0.0f,   1.0f, 0.0f,
+    //    -0.5f, -0.02f, 0.0f,   0.0f, 0.0f,
+    //    -0.5f,  0.02f, 0.0f,   0.0f, 1.0f,
+    //     0.5f, -0.02f, -1.0f,  1.0f, 1.0f,
+    //     0.5f,  0.02f, -1.0f,  1.0f, 0.0f,
+    //    -0.5f,  0.02f, -1.0f,  0.0f, 0.0f,
+    //    -0.5f, -0.02f, -1.0f,  0.0f, 1.0f
+    //};
+
+        // Position and Color data
     GLfloat verts[] = {
         // Vertex Positions    
          0.5f,  0.02f, 0.0f,   1.0f, 1.0f,
          0.5f, -0.02f, 0.0f,   1.0f, 0.0f,
-        -0.5f, -0.02f, 0.0f,   0.0f, 0.0f,
+        -0.5f, -0.02f, 0.0f,   0.0f, 1.0f,
         -0.5f,  0.02f, 0.0f,   0.0f, 1.0f,
          0.5f, -0.02f, -1.0f,  1.0f, 1.0f,
          0.5f,  0.02f, -1.0f,  1.0f, 0.0f,
@@ -927,12 +937,10 @@ void CreateLaptopScreen(GLMesh& screenMesh) {
         -0.5f, -0.02f, -1.0f,  0.0f, 1.0f
     };
 
-
-
     // Index data to share position data
     GLushort indices[] = {
         0, 1, 3, // Triangle 1
-        1, 2, 3, // Triangle 2
+        3,2,1, // Triangle 2
         0, 1, 4, // Triangle 3
         0, 4, 5, // Triangle 4
         0, 5, 6, // Triangle 5
@@ -944,8 +952,6 @@ void CreateLaptopScreen(GLMesh& screenMesh) {
         1, 4, 7, // Triangle 11
         1, 2, 7  // Triangle 12
     };
-
-
 
     const GLuint floatsPerVertex = 3;
     const GLuint floatsPerTexture = 2;
@@ -968,7 +974,6 @@ void CreateLaptopScreen(GLMesh& screenMesh) {
     glVertexAttribPointer(0, floatsPerVertex, GL_FLOAT, GL_FALSE, stride, 0);
     glEnableVertexAttribArray(0);
 
-
     glVertexAttribPointer(2, floatsPerTexture, GL_FLOAT, GL_FALSE, stride, (char*)(sizeof(float) * floatsPerTexture));
     glEnableVertexAttribArray(2);
 
@@ -983,21 +988,39 @@ void CreateLaptopScreen(GLMesh& screenMesh) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     // load and generate the texture
     int width, height, nrChannels;
-    int width2, height2, nrChannels2;
-    unsigned char* data = stbi_load("assets/textures/screen.png", &width, &height, &nrChannels, 0);
-    unsigned char* data2 = stbi_load("assets/textures/base.png", &width2, &height2, &nrChannels2, 0);
-
-    if (data || data2)
+    
+    unsigned char *data = stbi_load("assets/textures/desktop.png", &width, &height, &nrChannels, 0);
+    //flipImageVertically(data, width, height, nrChannels);
+    if (data)
     {
-        flipImageVertically(data, width, height, nrChannels);
-        flipImageVertically(data2, width2, height2, nrChannels2);
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-        if (nrChannels == 3) {
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
-        }
-        else if (nrChannels == 4) {
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
-        }
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+
+        std::cout << width << std::endl;
+        std::cout << height << std::endl;
+    }
+    else
+    {
+        std::cout << "Failed to load texture" << std::endl;
+    }
+    stbi_image_free(data);
+
+    //Loading second texture
+    glGenTextures(1, &desktopTexture);
+    glBindTexture(GL_TEXTURE_2D, desktopTexture);
+
+    // set the texture wrapping parameters
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);	// set texture wrapping to GL_REPEAT (default wrapping method)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    // set texture filtering parameters
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    data = stbi_load("assets/textures/screen.png", &width, &height, &nrChannels, 0);
+    //flipImageVertically(data, width, height, nrChannels);
+
+    if (data)
+    {
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
         glGenerateMipmap(GL_TEXTURE_2D);
     }
     else
@@ -1005,7 +1028,12 @@ void CreateLaptopScreen(GLMesh& screenMesh) {
         std::cout << "Failed to load texture" << std::endl;
     }
     stbi_image_free(data);
-    stbi_image_free(data2);
+    // Set the shader to be used
+    glUseProgram(gProgramId);
+    // We set the texture as texture unit 0
+    glUniform1i(glGetUniformLocation(gProgramId, "ourTexture"), 0);
+    // We set the texture as texture unit 1
+    glUniform1i(glGetUniformLocation(gProgramId, "uExtraTexture"), 1);
 }
 
 // Renders laptop lid
@@ -1031,10 +1059,7 @@ void RenderLaptopScreen() {
     }
     // Set the shader to be used
     glUseProgram(gProgramId);
-    // We set the texture as texture unit 0
-    //glUniform1i(glGetUniformLocation(gProgramId, "ourTexture"), 0);
-    // We set the texture as texture unit 1
-    //glUniform1i(glGetUniformLocation(gProgramId, "uExtraTexture"), 1);
+
 
     // Retrieves and passes transform matrices to the Shader program
     GLint modelLoc = glGetUniformLocation(gProgramId, "model");
@@ -1044,6 +1069,8 @@ void RenderLaptopScreen() {
     glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
     glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
     glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
+    
+
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, screenTexture);
     glActiveTexture(GL_TEXTURE1);
