@@ -38,7 +38,7 @@ using namespace std; // Standard namespace
 // Unnamed namespace
 namespace
 {
-    const char* const WINDOW_TITLE = "Gino Murin - 6/2/2022"; // Macro for window title
+    const char* const WINDOW_TITLE = "Gino Murin - 6/5/2022"; // Macro for window title
 
     // Variables for window width and height
     const int WINDOW_WIDTH = 800;
@@ -66,7 +66,7 @@ namespace
     GLFWwindow* gWindow = nullptr;
     // Triangle mesh data
     GLMesh gMesh, tblMesh, lidMesh, cylMesh, screenMesh;
-    unsigned int texture, baseTexture, lidTexture, screenTexture;
+    unsigned int texture, baseTexture, lidTexture, screenTexture, desktopTexture;
 
     // Shader program
     GLuint gProgramId;
@@ -128,10 +128,15 @@ const GLchar* fragmentShaderSource = GLSL(440,
 in vec2 TexCoord;
 
 uniform sampler2D ourTexture;
+uniform sampler2D uExtraTexture;
+uniform bool multipleTextures;
 
 void main()
 {
     fragmentColor = texture(ourTexture, TexCoord);
+    vec4 extraTexture = texture(uExtraTexture, TexCoord);
+    fragmentColor = extraTexture;
+   
 }
 );
 
@@ -969,6 +974,7 @@ void CreateLaptopScreen(GLMesh& screenMesh) {
 
     glGenTextures(1, &screenTexture);
     glBindTexture(GL_TEXTURE_2D, screenTexture);
+
     // set the texture wrapping parameters
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);	// set texture wrapping to GL_REPEAT (default wrapping method)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
@@ -977,15 +983,21 @@ void CreateLaptopScreen(GLMesh& screenMesh) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     // load and generate the texture
     int width, height, nrChannels;
+    int width2, height2, nrChannels2;
     unsigned char* data = stbi_load("assets/textures/screen.png", &width, &height, &nrChannels, 0);
-    if (data)
+    unsigned char* data2 = stbi_load("assets/textures/base.png", &width2, &height2, &nrChannels2, 0);
+
+    if (data || data2)
     {
         flipImageVertically(data, width, height, nrChannels);
+        flipImageVertically(data2, width2, height2, nrChannels2);
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-        if (nrChannels == 3)
+        if (nrChannels == 3) {
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
-        else if (nrChannels == 4)
+        }
+        else if (nrChannels == 4) {
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+        }
         glGenerateMipmap(GL_TEXTURE_2D);
     }
     else
@@ -993,6 +1005,7 @@ void CreateLaptopScreen(GLMesh& screenMesh) {
         std::cout << "Failed to load texture" << std::endl;
     }
     stbi_image_free(data);
+    stbi_image_free(data2);
 }
 
 // Renders laptop lid
@@ -1018,6 +1031,10 @@ void RenderLaptopScreen() {
     }
     // Set the shader to be used
     glUseProgram(gProgramId);
+    // We set the texture as texture unit 0
+    //glUniform1i(glGetUniformLocation(gProgramId, "ourTexture"), 0);
+    // We set the texture as texture unit 1
+    //glUniform1i(glGetUniformLocation(gProgramId, "uExtraTexture"), 1);
 
     // Retrieves and passes transform matrices to the Shader program
     GLint modelLoc = glGetUniformLocation(gProgramId, "model");
@@ -1029,6 +1046,8 @@ void RenderLaptopScreen() {
     glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, screenTexture);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, desktopTexture);
     // Activate the VBOs contained within the mesh's VAO
     glBindVertexArray(screenMesh.vao);
 
