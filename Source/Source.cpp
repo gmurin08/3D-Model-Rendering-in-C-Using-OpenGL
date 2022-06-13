@@ -2,14 +2,13 @@
 * The following code expands on previous iterations by implementing
 * the following changes:
 *
-* --Created two seperate textures on the laptop
-* screen to texture the front and back.
+* --Lighting has been added to the scene
 *
 * These changes were implemented by:
-* 1. Updating the fragment shader with a second texture container
-* 2. Loading the second texture from file
-* 3. Loading both the first and second texture into our shader program
-* 4. Rendering the mesh with the second texture
+* 1. Creating seperate vertex and fragment shaders to handle lighting.
+* 2. Updated existing shaders to facilitate lighting.
+* 3. Mapped normals to the existing objects within the scene
+* 
 */
 
 #include <iostream>         // cout, cerr
