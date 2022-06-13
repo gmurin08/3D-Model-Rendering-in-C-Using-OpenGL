@@ -128,12 +128,16 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Bmp.cpp" />
+    <ClCompile Include="Cylinder.cpp" />
     <ClCompile Include="glad.c" />
     <ClCompile Include="shader.cpp" />
     <ClCompile Include="Source.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Bmp.h" />
     <ClInclude Include="camera.h" />
+    <ClInclude Include="Cylinder.h" />
     <ClInclude Include="linmath.h" />
     <ClInclude Include="mesh.h" />
     <ClInclude Include="shader.h" />

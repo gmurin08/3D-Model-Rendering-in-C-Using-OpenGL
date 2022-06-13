@@ -25,7 +25,7 @@
 //image library implementation
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
-
+#include "Cylinder.h"
 using namespace std; // Standard namespace
 
 /*Shader program Macro*/
@@ -41,7 +41,7 @@ namespace
     // Variables for window width and height
     const int WINDOW_WIDTH = 800;
     const int WINDOW_HEIGHT = 600;
-
+    Cylinder c;
     // Declares a camera wit specific x,y,z position
     Camera camera(glm::vec3(0.0f, 5.0f, 8.0f));
     float lastX = WINDOW_WIDTH / 2.0f;
@@ -63,11 +63,38 @@ namespace
     // Main GLFW window
     GLFWwindow* gWindow = nullptr;
     // Triangle mesh data
-    GLMesh gMesh, tblMesh, lidMesh, cylMesh, screenMesh;
-    unsigned int texture, baseTexture, lidTexture, screenTexture, desktopTexture;
+    GLMesh gMesh, tblMesh, lidMesh, cylMesh, screenMesh, pencilMesh, lightMesh;
+    unsigned int texture, texture2, baseTexture, lidTexture, screenTexture, desktopTexture;
+
+    glm::vec2 gUVScale(5.0f, 5.0f);
+    // camerad
+
+    float gLastX = WINDOW_WIDTH / 2.0f;
+    float gLastY = WINDOW_HEIGHT / 2.0f;
+    bool gFirstMouse = true;
+
+    // timing
+    float gDeltaTime = 0.0f; // time between current frame and last frame
+    float gLastFrame = 0.0f;
 
     // Shader program
-    GLuint gProgramId;
+    GLuint gProgramId, gKeyProgramId, gFillProgramId;
+
+    // Subject position and scale
+    glm::vec3 gCubePosition(0.0f, 0.0f, 0.0f);
+    glm::vec3 gCubeScale(2.0f);
+    // Cube and light color
+    //m::vec3 gObjectColor(0.6f, 0.5f, 0.75f);
+    glm::vec3 gObjectColor(1.f, 0.2f, 0.0f);
+    glm::vec3 gLightColor(0.0f, 0.5f, 0.0f);
+
+    // Light position and scale
+    glm::vec3 gLightPosition(1.5f, 0.5f, 3.0f);
+    glm::vec3 gLightPosition2(-1.5f, 0.5f, -3.0f);
+    glm::vec3 gLightScale(0.3f);
+
+    // Lamp animation
+    bool gIsLampOrbiting = true;
 }
 
 
@@ -91,6 +118,8 @@ void CreateLaptopScreen(GLMesh& screenMesh);
 void RenderLaptopScreen();
 void CreateTable(GLMesh& tblMesh);
 void RenderTable();
+void CreateLight(GLMesh& lightMesh);
+void RenderLight(float pos);
 bool UCreateShaderProgram(const char* vtxShaderSource, const char* fragShaderSource, GLuint& programId);
 void UDestroyShaderProgram(GLuint programId);
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
@@ -100,13 +129,16 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 //flag to toggle orthogonal/perspective views
 bool isOrtho = false;
 
-/* Vertex Shader Source Code*/
+/* Object Vertex Shader Source Code*/
 const GLchar* vertexShaderSource = GLSL(440,
     layout(location = 0) in vec3 position; // Vertex data from Vertex Attrib Pointer 0
-
+layout(location = 1) in vec3 normal;
 layout(location = 2) in vec2 aTexCoord;
 
+out vec3 vertexNormal; // For outgoing normals to fragment shader
+out vec3 vertexFragmentPos; // For outgoing color / pixels to fragment shader
 out vec2 TexCoord;
+
 //Global variables for the  transform matrices
 uniform mat4 model;
 uniform mat4 view;
@@ -114,6 +146,9 @@ uniform mat4 projection;
 void main()
 {
     gl_Position = projection * view * model * vec4(position, 1.0f); // transforms vertices to clip coordinates
+    vertexFragmentPos = vec3(model * vec4(position, 1.0f)); // Gets fragment / pixel position in world space only (exclude view and projection)
+
+    vertexNormal = mat3(transpose(inverse(model))) * normal; // get normal vectors in world space only and exclude normal translation properties
     TexCoord = aTexCoord;
 }
 );
@@ -124,15 +159,75 @@ const GLchar* fragmentShaderSource = GLSL(440,
     out vec4 fragmentColor;
 
 in vec2 TexCoord;
+in vec3 vertexNormal; // For incoming normals
+in vec3 vertexFragmentPos; // For incoming fragment position
 
+uniform vec3 lightColor;
+uniform vec3 lightPos;
+uniform vec3 viewPosition;
 uniform sampler2D ourTexture;
 uniform sampler2D uExtraTexture;
 uniform bool multipleTextures;
+uniform vec2 uvScale;
 
 void main()
 {
+    
+    /*Phong lighting model calculations to generate ambient, diffuse, and specular components*/
+
+//Calculate Ambient lighting*/
+    float ambientStrength = 0.1f; // Set ambient or global lighting strength
+    vec3 ambient = ambientStrength * lightColor; // Generate ambient light color
+
+    //Calculate Diffuse lighting*/
+    vec3 norm = normalize(vertexNormal); // Normalize vectors to 1 unit
+    vec3 lightDirection = normalize(lightPos - vertexFragmentPos); // Calculate distance (light direction) between light source and fragments/pixels on cube
+    float impact = max(dot(norm, lightDirection), 0.0);// Calculate diffuse impact by generating dot product of normal and light
+    vec3 diffuse = impact * lightColor; // Generate diffuse light color
+
+    //Calculate Specular lighting*/
+    float specularIntensity = 0.8f; // Set specular light strength
+    float highlightSize = 16.0f; // Set specular highlight size
+    vec3 viewDir = normalize(viewPosition - vertexFragmentPos); // Calculate view direction
+    vec3 reflectDir = reflect(-lightDirection, norm);// Calculate reflection vector
+    //Calculate specular component
+    float specularComponent = pow(max(dot(viewDir, reflectDir), 0.0), highlightSize);
+    vec3 specular = specularIntensity * specularComponent * lightColor;
+
+    // Texture holds the color to be used for all three components
+    vec4 textureColor = texture(ourTexture, TexCoord * uvScale);
+
+    // Calculate phong result
+    vec3 phong = (ambient + diffuse + specular) * textureColor.xyz;
     fragmentColor = mix(texture(ourTexture, TexCoord), texture(uExtraTexture, TexCoord), 1.0);
-   
+}
+);
+
+/* Lamp Shader Source Code*/
+const GLchar* lampVertexShaderSource = GLSL(440,
+
+    layout(location = 0) in vec3 position; // VAP position 0 for vertex position data
+
+        //Uniform / Global variables for the  transform matrices
+uniform mat4 model;
+uniform mat4 view;
+uniform mat4 projection;
+
+void main()
+{
+    gl_Position = projection * view * model * vec4(position, 1.0f); // Transforms vertices into clip coordinates
+}
+);
+
+
+/* Fragment Shader Source Code*/
+const GLchar* lampFragmentShaderSource = GLSL(440,
+
+    out vec4 fragmentColor; // For outgoing lamp color (smaller cube) to the GPU
+
+void main()
+{
+    fragmentColor = vec4(1.0f); // Set color to white (1.0f,1.0f,1.0f) with alpha 1.0
 }
 );
 
@@ -161,16 +256,24 @@ int main(int argc, char* argv[])
 {
     if (!UInitialize(argc, argv, &gWindow))
         return EXIT_FAILURE;
+    Cylinder c;
+    c.set(0.0f, 1.0f, 2.0f, 36, 1, true);
+    const float* f = c.getVertices();
 
     //Functions to create meshes for objects
     CreateLaptopBase(gMesh);
     CreateLaptopLid(lidMesh);
     CreateTable(tblMesh);
     CreateLaptopScreen(screenMesh);
+    CreateLight(lightMesh);
     // Create the shader program
     if (!UCreateShaderProgram(vertexShaderSource, fragmentShaderSource, gProgramId))
         return EXIT_FAILURE;
+   /* if (!UCreateShaderProgram(lampVertexShaderSource, lampFragmentShaderSource, gKeyProgramId))
+        return EXIT_FAILURE;
 
+    if (!UCreateShaderProgram(lampVertexShaderSource, lampFragmentShaderSource, gFillProgramId))
+        return EXIT_FAILURE;*/
     // Sets the background color of the window to black (it will be implicitely used by glClear)
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 
@@ -195,7 +298,7 @@ int main(int argc, char* argv[])
     // Release mesh data
     UDestroyMesh(gMesh);
     UDestroyMesh(lidMesh);
-    UDestroyMesh(tblMesh);  
+    UDestroyMesh(tblMesh);
     UDestroyMesh(screenMesh);
     // Release shader program
     UDestroyShaderProgram(gProgramId);
@@ -338,6 +441,10 @@ void URender()
     RenderLaptopBase();
     RenderLaptopLid();
     RenderLaptopScreen();
+    RenderLight(-2.0f);
+    RenderLight(-8.0f);
+    RenderLight(4.0f);
+   // RenderPenchil();
 
 
     // Deactivate the Vertex Array Object
@@ -988,16 +1095,13 @@ void CreateLaptopScreen(GLMesh& screenMesh) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     // load and generate the texture
     int width, height, nrChannels;
-    
-    unsigned char *data = stbi_load("assets/textures/desktop.png", &width, &height, &nrChannels, 0);
+
+    unsigned char* data = stbi_load("assets/textures/desktop.png", &width, &height, &nrChannels, 0);
     //flipImageVertically(data, width, height, nrChannels);
     if (data)
     {
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
         glGenerateMipmap(GL_TEXTURE_2D);
-
-        std::cout << width << std::endl;
-        std::cout << height << std::endl;
     }
     else
     {
@@ -1069,7 +1173,7 @@ void RenderLaptopScreen() {
     glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
     glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
     glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
-    
+
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, screenTexture);
@@ -1082,4 +1186,134 @@ void RenderLaptopScreen() {
     glDrawElements(GL_TRIANGLES, screenMesh.nIndices, GL_UNSIGNED_SHORT, NULL); // Draws the triangle
     glBindVertexArray(0);
 }
+
+void CreateLight(GLMesh& lightMesh) {
+    // Position and Color data
+    GLfloat verts[] = {
+        // Vertex Positions          //Textures
+         1.0f,  1.0f, 0.0f,      1.0f, 1.0f, // Top-Right Vertex 0
+         1.0f, -1.0f, 0.0f,      1.0f, 0.0f, // Bottom-Right Vertex 1
+        -1.0f, -1.0f, 0.0f,     0.0f, 0.0f, // Bottom-Left Vertex 2
+        -1.0f,  1.0f, 0.0f,     0.0f, 1.0f, // Top-Left Vertex 3
+
+         1.0f, -1.0f, -1.0f,   1.0f, 1.0f, // 4 br  right
+         1.0f,  1.0f, -1.0f,   1.0f, 0.0f, //  5 tl  right
+        -1.0f,  1.0f, -1.0f,    0.0f, 0.0f, //  6 tl  top
+        -1.0f, -1.0f, -1.0f,    0.0f, 1.0f  //  7 bl back
+    };
+
+    // Index data to share position data
+    GLushort indices[] = {
+        0, 1, 3, // Triangle 1
+        1, 2, 3, // Triangle 2
+        0, 1, 4, // Triangle 3
+        0, 4, 5, // Triangle 4
+        0, 5, 6, // Triangle 5
+        0, 3, 6, // Triangle 6
+        4, 5, 6, // Triangle 7
+        4, 6, 7, // Triangle 8
+        2, 3, 6, // Triangle 9
+        2, 6, 7, // Triangle 10
+        1, 4, 7, // Triangle 11
+        1, 2, 7  // Triangle 12
+    };
+
+    const GLuint floatsPerVertex = 3;
+
+    const GLuint floatsPerTexture = 2;
+
+
+
+    glGenVertexArrays(1, &lightMesh.vao); // we can also generate multiple VAOs or buffers at the same time
+    glBindVertexArray(lightMesh.vao);
+
+    // Create 2 buffers: first one for the vertex data; second one for the indices
+    glGenBuffers(2, lightMesh.vbos);
+    glBindBuffer(GL_ARRAY_BUFFER, lightMesh.vbos[0]); // Activates the buffer
+    glBufferData(GL_ARRAY_BUFFER, sizeof(verts), verts, GL_STATIC_DRAW); // Sends vertex or coordinate data to the GPU
+
+    lightMesh.nIndices = sizeof(indices) / sizeof(indices[0]);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, lightMesh.vbos[1]);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+
+    // Strides between vertex coordinates is 6 (x, y, z, r, g, b, a). A tightly packed stride is 0.
+    GLint stride = sizeof(float) * (floatsPerVertex + floatsPerTexture);// The number of floats before each
+
+    // Create Vertex Attribute Pointers
+    glVertexAttribPointer(0, floatsPerVertex, GL_FLOAT, GL_FALSE, stride, 0);
+    glEnableVertexAttribArray(0);
+
+
+
+    glVertexAttribPointer(2, floatsPerTexture, GL_FLOAT, GL_FALSE, stride, (char*)(sizeof(float) * floatsPerTexture));
+    glEnableVertexAttribArray(2);
+
+    glGenTextures(1, &texture2);
+    glBindTexture(GL_TEXTURE_2D, texture2);
+    // set the texture wrapping parameters
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);	// set texture wrapping to GL_REPEAT (default wrapping method)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    // set texture filtering parameters
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    // load and generate the texture
+    int width, height, nrChannels;
+    unsigned char* data = stbi_load("assets/textures/light.png", &width, &height, &nrChannels, 0);
+    if (data)
+    {
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+    }
+    else
+    {
+        std::cout << "Failed to load texture" << std::endl;
+    }
+    stbi_image_free(data);
+}
+
+void RenderLight(float pos) {
+    // 1. Scales the object by 2
+    glm::mat4 scale = glm::scale(glm::vec3(0.5f, 0.5f, 0.5f));
+    // 2. Rotates shape by 15 degrees in the x axis
+    glm::mat4 rotation = glm::rotate(0.0f, glm::vec3(1.0f, 1.0f, 1.0f));
+    // 3. Place object at the origin
+    glm::mat4 translation = glm::translate(glm::vec3(pos, 7.15f, -4.0f)); //-2.0f
+    // Model matrix: transformations are applied right-to-left order
+    glm::mat4 model = translation * rotation * scale;
+
+    // Transforms the camera: move the camera back (z axis)
+    //glm::mat4 view = glm::translate(glm::vec3(0.0f, 1.3f, -6.0f));
+    //takes in the current camera postion
+    glm::mat4 view = camera.GetViewMatrix();
+    // Creates a perspective projection
+    glm::mat4 projection = glm::perspective(45.0f, (GLfloat)WINDOW_WIDTH / (GLfloat)WINDOW_HEIGHT, 0.1f, 100.0f);
+
+    //**Updates projection to orthogonal if flag is set
+    if (isOrtho == true) {
+        projection = glm::ortho(-5.0f, 5.0f, -5.0f, 5.0f, 0.1f, 100.0f);
+    }
+    // Set the shader to be used
+    glUseProgram(gProgramId);
+
+    // Retrieves and passes transform matrices to the Shader program
+    GLint modelLoc = glGetUniformLocation(gProgramId, "model");
+    GLint viewLoc = glGetUniformLocation(gProgramId, "view");
+    GLint projLoc = glGetUniformLocation(gProgramId, "projection");
+
+    glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
+    glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
+    glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, texture2);
+    // Activate the VBOs contained within the mesh's VAO
+    glBindVertexArray(lightMesh.vao);
+
+    // Draws pyramid
+    glDrawElements(GL_TRIANGLES, lightMesh.nIndices, GL_UNSIGNED_SHORT, 0); // Draws the triangle
+    glBindVertexArray(0);
+}
+
+
+
 
