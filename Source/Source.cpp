@@ -7,7 +7,7 @@
 * These changes were implemented by:
 * 1. Creating seperate vertex and fragment shaders to handle lighting.
 * 2. Updated existing shaders to facilitate lighting.
-* 3. Mapped normals to the existing objects within the scene
+* 3. Mapped normals to the existing objects within the scene.
 * 
 */
 
@@ -40,7 +40,8 @@ namespace
     // Variables for window width and height
     const int WINDOW_WIDTH = 800;
     const int WINDOW_HEIGHT = 600;
-    Cylinder c;
+    Cylinder cylinder1(0.1, 0.1, 3, 6, 8, false);
+    Cylinder cylinder2(1.0, 1.0, 1.0, 100, 1, false);
     // Declares a camera wit specific x,y,z position
     Camera camera(glm::vec3(0.0f, 5.0f, 8.0f));
     float lastX = WINDOW_WIDTH / 2.0f;
@@ -62,8 +63,8 @@ namespace
     // Main GLFW window
     GLFWwindow* gWindow = nullptr;
     // Triangle mesh data
-    GLMesh gMesh, tblMesh, lidMesh, cylMesh, screenMesh, pencilMesh, lightMesh;
-    unsigned int texture, texture2, baseTexture, lidTexture, screenTexture, desktopTexture;
+    GLMesh gMesh, tblMesh, lidMesh, cylMesh, screenMesh, pencilMesh, lightMesh, podMesh;
+    unsigned int texture, texture2, baseTexture, lidTexture, screenTexture, desktopTexture, pencilTexture;
 
     glm::vec2 gUVScale(5.0f, 5.0f);
     // camerad
@@ -119,6 +120,10 @@ void CreateTable(GLMesh& tblMesh);
 void RenderTable();
 void CreateLight(GLMesh& lightMesh);
 void RenderLight(float pos);
+void CreatePencil(GLMesh& cylMesh);
+void RenderPencil();
+void CreatePods(GLMesh& podMesh);
+void RenderPods();
 bool UCreateShaderProgram(const char* vtxShaderSource, const char* fragShaderSource, GLuint& programId);
 void UDestroyShaderProgram(GLuint programId);
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
@@ -133,11 +138,13 @@ const GLchar* vertexShaderSource = GLSL(440,
     layout(location = 0) in vec3 position; // Vertex data from Vertex Attrib Pointer 0
 layout(location = 1) in vec3 normal;
 layout(location = 2) in vec2 aTexCoord;
+layout(location = 3) in vec4 color;
 
 out vec3 vertexNormal; // For outgoing normals to fragment shader
 out vec3 vertexFragmentPos; // For outgoing color / pixels to fragment shader
 out vec2 TexCoord;
-
+out vec4 vertexColors;
+out vec4 vertexColor;
 //Global variables for the  transform matrices
 uniform mat4 model;
 uniform mat4 view;
@@ -146,7 +153,7 @@ void main()
 {
     gl_Position = projection * view * model * vec4(position, 1.0f); // transforms vertices to clip coordinates
     vertexFragmentPos = vec3(model * vec4(position, 1.0f)); // Gets fragment / pixel position in world space only (exclude view and projection)
-
+    vertexColors = color;
     vertexNormal = mat3(transpose(inverse(model))) * normal; // get normal vectors in world space only and exclude normal translation properties
     TexCoord = aTexCoord;
 }
@@ -156,7 +163,9 @@ void main()
 /* Fragment Shader Source Code*/
 const GLchar* fragmentShaderSource = GLSL(440,
     out vec4 fragmentColor;
-
+out vec4 fragmentColors;
+in vec4 vertexColors;
+in vec4 vertexColor;
 in vec2 TexCoord;
 in vec3 vertexNormal; // For incoming normals
 in vec3 vertexFragmentPos; // For incoming fragment position
@@ -173,7 +182,7 @@ void main()
 {
     
     /*Phong lighting model calculations to generate ambient, diffuse, and specular components*/
-
+    fragmentColor = vec4(vertexColor);
 //Calculate Ambient lighting*/
     float ambientStrength = 0.1f; // Set ambient or global lighting strength
     vec3 ambient = ambientStrength * lightColor; // Generate ambient light color
@@ -199,6 +208,7 @@ void main()
     // Calculate phong result
     vec3 phong = (ambient + diffuse + specular) * textureColor.xyz;
     fragmentColor = mix(texture(ourTexture, TexCoord), texture(uExtraTexture, TexCoord), 1.0);
+    fragmentColors = vertexColors;
 }
 );
 
@@ -219,7 +229,7 @@ void main()
 );
 
 
-/* Fragment Shader Source Code*/
+/* LAMP Fragment Shader Source Code*/
 const GLchar* lampFragmentShaderSource = GLSL(440,
 
     out vec4 fragmentColor; // For outgoing lamp color (smaller cube) to the GPU
@@ -255,16 +265,15 @@ int main(int argc, char* argv[])
 {
     if (!UInitialize(argc, argv, &gWindow))
         return EXIT_FAILURE;
-    Cylinder c;
-    c.set(0.0f, 1.0f, 2.0f, 36, 1, true);
-    const float* f = c.getVertices();
-
+  
     //Functions to create meshes for objects
     CreateLaptopBase(gMesh);
     CreateLaptopLid(lidMesh);
     CreateTable(tblMesh);
     CreateLaptopScreen(screenMesh);
     CreateLight(lightMesh);
+    CreatePencil(cylMesh);
+    CreatePods(podMesh);
     // Create the shader program
     if (!UCreateShaderProgram(vertexShaderSource, fragmentShaderSource, gProgramId))
         return EXIT_FAILURE;
@@ -275,8 +284,8 @@ int main(int argc, char* argv[])
         return EXIT_FAILURE;*/
     // Sets the background color of the window to black (it will be implicitely used by glClear)
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-
-
+    cylinder1.printSelf();
+    
     // render loop
     // -----------
     while (!glfwWindowShouldClose(gWindow))
@@ -443,8 +452,8 @@ void URender()
     RenderLight(-2.0f);
     RenderLight(-8.0f);
     RenderLight(4.0f);
-   // RenderPenchil();
-
+    RenderPencil();
+    RenderPods();
 
     // Deactivate the Vertex Array Object
     glBindVertexArray(0);
@@ -1238,6 +1247,8 @@ void CreateLight(GLMesh& lightMesh) {
     // Strides between vertex coordinates is 6 (x, y, z, r, g, b, a). A tightly packed stride is 0.
     GLint stride = sizeof(float) * (floatsPerVertex + floatsPerTexture);// The number of floats before each
 
+
+  
     // Create Vertex Attribute Pointers
     glVertexAttribPointer(0, floatsPerVertex, GL_FLOAT, GL_FALSE, stride, 0);
     glEnableVertexAttribArray(0);
@@ -1277,7 +1288,7 @@ void RenderLight(float pos) {
     // 2. Rotates shape by 15 degrees in the x axis
     glm::mat4 rotation = glm::rotate(0.0f, glm::vec3(1.0f, 1.0f, 1.0f));
     // 3. Place object at the origin
-    glm::mat4 translation = glm::translate(glm::vec3(pos, 7.15f, -4.0f)); //-2.0f
+    glm::mat4 translation = glm::translate(glm::vec3(pos, 7.0f, -4.0f)); //-2.0f
     // Model matrix: transformations are applied right-to-left order
     glm::mat4 model = translation * rotation * scale;
 
@@ -1310,6 +1321,218 @@ void RenderLight(float pos) {
 
     // Draws pyramid
     glDrawElements(GL_TRIANGLES, lightMesh.nIndices, GL_UNSIGNED_SHORT, 0); // Draws the triangle
+    glBindVertexArray(0);
+}
+
+// loads vertex, index, and color data into for laptop lid into mesh
+void CreatePencil(GLMesh& cylMesh) {
+     //Position and Color data
+    const int size1 = cylinder1.getTexCoordCount() ;
+    int count=0;
+    int texCount = 0;
+    GLfloat verts[618+412];
+
+    for (int i = 0; i < 618+412; i+=5){
+        verts[i] = cylinder1.getVertices()[count];
+        verts[i + 1] = cylinder1.getVertices()[count + 1];
+        verts[i + 2] = cylinder1.getVertices()[count + 2];
+        count += 3;
+        verts[i + 3] = cylinder1.getTexCoords()[texCount];
+        verts[i + 4] = cylinder1.getTexCoords()[texCount+1];
+        texCount += 2;
+    }
+
+
+    // Index data to share position data
+    GLushort indices[1944];
+
+    for (int i = 0; i < cylinder1.getVertexCount(); i++) {
+        indices[i] = cylinder1.getIndices()[i];
+    }
+
+    const GLuint floatsPerVertex = 3;
+
+    const GLuint floatsPerTexture = 2;
+
+      
+
+    glGenVertexArrays(1, &cylMesh.vao); // we can also generate multiple VAOs or buffers at the same time
+    glBindVertexArray(cylMesh.vao);
+
+    // Create 2 buffers: first one for the vertex data; second one for the indices
+    glGenBuffers(2, cylMesh.vbos);
+    glBindBuffer(GL_ARRAY_BUFFER, cylMesh.vbos[0]); // Activates the buffer
+    glBufferData(GL_ARRAY_BUFFER, sizeof(verts), verts, GL_STATIC_DRAW); // Sends vertex or coordinate data to the GPU
+
+    cylMesh.nIndices = cylinder1.getIndexCount();
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, cylMesh.vbos[1]);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+
+    // Strides between vertex coordinates is 6 (x, y, z, r, g, b, a). A tightly packed stride is 0.
+    GLint stride = sizeof(float) * (floatsPerVertex + floatsPerTexture);// The number of floats before each
+
+    // Create Vertex Attribute Pointers
+    glVertexAttribPointer(0, floatsPerVertex, GL_FLOAT, GL_FALSE, stride, 0);
+    glEnableVertexAttribArray(0);
+
+
+    glVertexAttribPointer(2, floatsPerTexture, GL_FLOAT, GL_FALSE, stride, (char*)(sizeof(float) * floatsPerTexture));
+    glEnableVertexAttribArray(2);
+
+    glGenTextures(1, &pencilTexture);
+    glBindTexture(GL_TEXTURE_2D, pencilTexture);
+    // set the texture wrapping parameters
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);	// set texture wrapping to GL_REPEAT (default wrapping method)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    // set texture filtering parameters
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    // load and generate the texture
+    int width, height, nrChannels;
+    unsigned char* data = stbi_load("assets/textures/yellow.png", &width, &height, &nrChannels, 0);
+    if (data)
+    {
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+    }
+    else
+    {
+        std::cout << "Failed to load texture" << std::endl;
+    }
+    stbi_image_free(data);
+}
+
+void RenderPencil() {
+    // 1. Scales the object by 2
+    glm::mat4 scale = glm::scale(glm::vec3(1.0f, 1.0f, 1.0f));
+    // 2. Rotates shape by 15 degrees in the x axis
+    glm::mat4 rotation = glm::rotate(4.6f, glm::vec3(2.0f, 99.9f, 0.0f));
+    // 3. Place object at the origin
+    glm::mat4 translation = glm::translate(glm::vec3(3.0f, 0.05f, -0.49f));
+    // Model matrix: transformations are applied right-to-left order
+    glm::mat4 model = translation * rotation * scale;
+
+    // Transforms the camera: move the camera back (z axis)
+    //glm::mat4 view = glm::translate(glm::vec3(0.0f, 1.3f, -6.0f));
+    //takes in the current camera postion
+    glm::mat4 view = camera.GetViewMatrix();
+    // Creates a perspective projection
+    glm::mat4 projection = glm::perspective(45.0f, (GLfloat)WINDOW_WIDTH / (GLfloat)WINDOW_HEIGHT, 0.1f, 100.0f);
+    //**Updates projection to orthogonal if flag is set
+    if (isOrtho == true) {
+        projection = glm::ortho(-5.0f, 5.0f, -5.0f, 5.0f, 0.1f, 100.0f);
+    }
+    // Set the shader to be used
+    glUseProgram(gProgramId);
+
+
+    // Retrieves and passes transform matrices to the Shader program
+    GLint modelLoc = glGetUniformLocation(gProgramId, "model");
+    GLint viewLoc = glGetUniformLocation(gProgramId, "view");
+    GLint projLoc = glGetUniformLocation(gProgramId, "projection");
+
+    glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
+    glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
+    glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, pencilTexture);
+    
+    // Activate the VBOs contained within the mesh's VAO
+    glBindVertexArray(cylMesh.vao);
+
+    // Draws pyramid
+    glDrawElements(GL_TRIANGLES, cylMesh.nIndices, GL_UNSIGNED_SHORT, NULL); // Draws the triangle
+    glBindVertexArray(0);
+}
+
+// loads vertex, index, and color data into for laptop lid into mesh
+void CreatePods(GLMesh& podMesh) {
+    //Position and Color data
+    const int vertCount = cylinder2.getVertexCount();
+    int indCount = cylinder2.getIndexCount();
+
+    GLfloat verts[1806];
+
+    for (int i = 0; i < 1806; i ++) {
+        verts[i] = cylinder2.getVertices()[i];
+    }
+
+
+    // Index data to share position data
+    GLushort indices[1200];
+
+    for (int i = 0; i < 1200; i++) {
+        indices[i] = cylinder2.getIndices()[i];
+    }
+
+    const GLuint floatsPerVertex = 3;
+
+    const GLuint floatsPerTexture = 0;
+
+
+
+    glGenVertexArrays(1, &podMesh.vao); // we can also generate multiple VAOs or buffers at the same time
+    glBindVertexArray(podMesh.vao);
+
+    // Create 2 buffers: first one for the vertex data; second one for the indices
+    glGenBuffers(2, podMesh.vbos);
+    glBindBuffer(GL_ARRAY_BUFFER, podMesh.vbos[0]); // Activates the buffer
+    glBufferData(GL_ARRAY_BUFFER, sizeof(verts), verts, GL_STATIC_DRAW); // Sends vertex or coordinate data to the GPU
+
+    podMesh.nIndices = cylinder2.getIndexCount();
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, podMesh.vbos[1]);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+
+    // Strides between vertex coordinates is 6 (x, y, z, r, g, b, a). A tightly packed stride is 0.
+    GLint stride = sizeof(float) * (floatsPerVertex + floatsPerTexture);// The number of floats before each
+
+    // Create Vertex Attribute Pointers
+    glVertexAttribPointer(0, floatsPerVertex, GL_FLOAT, GL_FALSE, 0, 0);
+    glEnableVertexAttribArray(0);
+
+
+
+}
+
+void RenderPods() {
+    // 1. Scales the object by 2
+    glm::mat4 scale = glm::scale(glm::vec3(0.5f, 0.25f, 0.5f));
+    // 2. Rotates shape by 15 degrees in the x axis
+    glm::mat4 rotation = glm::rotate(4.6f, glm::vec3(2.0f, 99.9f, 0.0f));
+    // 3. Place object at the origin
+    glm::mat4 translation = glm::translate(glm::vec3(-3.5f, 0.1f, -1.49f));
+    // Model matrix: transformations are applied right-to-left order
+    glm::mat4 model = translation * rotation * scale;
+
+    // Transforms the camera: move the camera back (z axis)
+    //glm::mat4 view = glm::translate(glm::vec3(0.0f, 1.3f, -6.0f));
+    //takes in the current camera postion
+    glm::mat4 view = camera.GetViewMatrix();
+    // Creates a perspective projection
+    glm::mat4 projection = glm::perspective(45.0f, (GLfloat)WINDOW_WIDTH / (GLfloat)WINDOW_HEIGHT, 0.1f, 100.0f);
+    //**Updates projection to orthogonal if flag is set
+    if (isOrtho == true) {
+        projection = glm::ortho(-5.0f, 5.0f, -5.0f, 5.0f, 0.1f, 100.0f);
+    }
+    // Set the shader to be used
+    glUseProgram(gProgramId);
+
+
+    // Retrieves and passes transform matrices to the Shader program
+    GLint modelLoc = glGetUniformLocation(gProgramId, "model");
+    GLint viewLoc = glGetUniformLocation(gProgramId, "view");
+    GLint projLoc = glGetUniformLocation(gProgramId, "projection");
+
+    glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
+    glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
+    glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
+
+    // Activate the VBOs contained within the mesh's VAO
+    glBindVertexArray(podMesh.vao);
+
+    // Draws pyramid
+    glDrawElements(GL_TRIANGLES, podMesh.nIndices, GL_UNSIGNED_SHORT, NULL); // Draws the triangle
     glBindVertexArray(0);
 }
 
