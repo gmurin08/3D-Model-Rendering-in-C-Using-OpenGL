@@ -4,9 +4,13 @@
 *
 * --Headphone case added to scene
 * --Pencil added to scene
+* --Soda can added to scene
 *
 * These changes were implemented by:
 * 1. Creating meshes for each object
+*   -Pencil is drawn in the shape of a hexagon
+*   -Headphone case is drawn in the shape of an oblong cylinder
+*   -Soda can is drawn in the shape of a cylinder
 * 2. Calculating vertex and index data and storing in array
 * 3. Passing transformation and position data to the shader
 * 4. Rendering each object in the scene 
@@ -44,6 +48,7 @@ namespace
     const int WINDOW_HEIGHT = 600;
     Cylinder cylinder1(0.1, 0.1, 3, 6, 8, false);
     Cylinder cylinder2(1.0, 1.0, 1.0, 100, 1, false);
+    Cylinder cylinder3(0.7, 0.7, 2.6, 82, 22, false);
     // Declares a camera wit specific x,y,z position
     Camera camera(glm::vec3(0.0f, 5.0f, 8.0f));
     float lastX = WINDOW_WIDTH / 2.0f;
@@ -65,7 +70,7 @@ namespace
     // Main GLFW window
     GLFWwindow* gWindow = nullptr;
     // Triangle mesh data
-    GLMesh gMesh, tblMesh, lidMesh, cylMesh, screenMesh, pencilMesh, lightMesh, podMesh;
+    GLMesh gMesh, tblMesh, lidMesh, cylMesh, screenMesh, pencilMesh, lightMesh, podMesh, canMesh;
     unsigned int texture, texture2, baseTexture, lidTexture, screenTexture, desktopTexture, pencilTexture;
 
     glm::vec2 gUVScale(5.0f, 5.0f);
@@ -126,6 +131,8 @@ void CreatePencil(GLMesh& cylMesh);
 void RenderPencil();
 void CreatePods(GLMesh& podMesh);
 void RenderPods();
+void CreateCan(GLMesh& canMesh);
+void RenderCan();
 bool UCreateShaderProgram(const char* vtxShaderSource, const char* fragShaderSource, GLuint& programId);
 void UDestroyShaderProgram(GLuint programId);
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
@@ -276,6 +283,7 @@ int main(int argc, char* argv[])
     CreateLight(lightMesh);
     CreatePencil(cylMesh);
     CreatePods(podMesh);
+    CreateCan(canMesh);
     // Create the shader program
     if (!UCreateShaderProgram(vertexShaderSource, fragmentShaderSource, gProgramId))
         return EXIT_FAILURE;
@@ -286,7 +294,7 @@ int main(int argc, char* argv[])
         return EXIT_FAILURE;*/
     // Sets the background color of the window to black (it will be implicitely used by glClear)
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-    cylinder1.printSelf();
+    cylinder3.printSelf();
     
     // render loop
     // -----------
@@ -456,7 +464,7 @@ void URender()
     RenderLight(4.0f);
     RenderPencil();
     RenderPods();
-
+    RenderCan();
     // Deactivate the Vertex Array Object
     glBindVertexArray(0);
 
@@ -1541,6 +1549,95 @@ void RenderPods() {
     glBindVertexArray(0);
 }
 
+// loads vertex, index, and color data into for laptop lid into mesh
+void CreateCan(GLMesh& canMesh) {
+    //Position and Color data
+    const int vertCount = cylinder3.getVertexCount();
+    int indCount = cylinder3.getIndexCount();
+
+    GLfloat verts[22146];
+
+    for (int i = 0; i < 22146; i++) {
+        verts[i] = cylinder3.getVertices()[i];
+    }
+
+
+    // Index data to share position data
+    GLushort indices[11316];
+
+    for (int i = 0; i < 11316; i++) {
+        indices[i] = cylinder3.getIndices()[i];
+    }
+
+    const GLuint floatsPerVertex = 3;
+
+    const GLuint floatsPerTexture = 0;
+
+
+
+    glGenVertexArrays(1, &canMesh.vao); // we can also generate multiple VAOs or buffers at the same time
+    glBindVertexArray(canMesh.vao);
+
+    // Create 2 buffers: first one for the vertex data; second one for the indices
+    glGenBuffers(2, canMesh.vbos);
+    glBindBuffer(GL_ARRAY_BUFFER, canMesh.vbos[0]); // Activates the buffer
+    glBufferData(GL_ARRAY_BUFFER, sizeof(verts), verts, GL_STATIC_DRAW); // Sends vertex or coordinate data to the GPU
+
+    canMesh.nIndices = cylinder3.getIndexCount();
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, canMesh.vbos[1]);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+
+    // Strides between vertex coordinates is 6 (x, y, z, r, g, b, a). A tightly packed stride is 0.
+    GLint stride = sizeof(float) * (floatsPerVertex + floatsPerTexture);// The number of floats before each
+
+    // Create Vertex Attribute Pointers
+    glVertexAttribPointer(0, floatsPerVertex, GL_FLOAT, GL_FALSE, 0, 0);
+    glEnableVertexAttribArray(0);
+
+
+
+}
+
+void RenderCan() {
+    // 1. Scales the object by 2
+    glm::mat4 scale = glm::scale(glm::vec3(0.5f, 0.5f, 0.5f));
+    // 2. Rotates shape by 15 degrees in the x axis
+    glm::mat4 rotation = glm::rotate(4.7f, glm::vec3(0.01f, 0.0f, 0.0f));
+    // 3. Place object at the origin
+    glm::mat4 translation = glm::translate(glm::vec3(-3.0f, 0.5f, -4.00f));
+    // Model matrix: transformations are applied right-to-left order
+    glm::mat4 model = translation * rotation * scale;
+
+    // Transforms the camera: move the camera back (z axis)
+    //glm::mat4 view = glm::translate(glm::vec3(0.0f, 1.3f, -6.0f));
+    //takes in the current camera postion
+    glm::mat4 view = camera.GetViewMatrix();
+    // Creates a perspective projection
+    glm::mat4 projection = glm::perspective(45.0f, (GLfloat)WINDOW_WIDTH / (GLfloat)WINDOW_HEIGHT, 0.1f, 100.0f);
+    //**Updates projection to orthogonal if flag is set
+    if (isOrtho == true) {
+        projection = glm::ortho(-5.0f, 5.0f, -5.0f, 5.0f, 0.1f, 100.0f);
+    }
+    // Set the shader to be used
+    glUseProgram(gProgramId);
+
+
+    // Retrieves and passes transform matrices to the Shader program
+    GLint modelLoc = glGetUniformLocation(gProgramId, "model");
+    GLint viewLoc = glGetUniformLocation(gProgramId, "view");
+    GLint projLoc = glGetUniformLocation(gProgramId, "projection");
+
+    glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
+    glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
+    glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
+
+    // Activate the VBOs contained within the mesh's VAO
+    glBindVertexArray(canMesh.vao);
+
+    // Draws pyramid
+    glDrawElements(GL_TRIANGLES, canMesh.nIndices, GL_UNSIGNED_SHORT, NULL); // Draws the triangle
+    glBindVertexArray(0);
+}
 
 
 
