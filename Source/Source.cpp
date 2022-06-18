@@ -1342,11 +1342,14 @@ void CreatePencil(GLMesh& cylMesh) {
         texCount += 2;
     }
 
-
+    GLfloat intverts[618];
+    
+    
+    
     // Index data to share position data
-    GLushort indices[1944];
+    GLushort indices[324];
 
-    for (int i = 0; i < cylinder1.getVertexCount(); i++) {
+    for (int i = 0; i < 324; i++) {
         indices[i] = cylinder1.getIndices()[i];
     }
 
