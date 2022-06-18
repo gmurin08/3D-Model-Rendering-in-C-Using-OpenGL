@@ -2,12 +2,14 @@
 * The following code expands on previous iterations by implementing
 * the following changes:
 *
-* --Lighting has been added to the scene
+* --Headphone case added to scene
+* --Pencil added to scene
 *
 * These changes were implemented by:
-* 1. Creating seperate vertex and fragment shaders to handle lighting.
-* 2. Updated existing shaders to facilitate lighting.
-* 3. Mapped normals to the existing objects within the scene.
+* 1. Creating meshes for each object
+* 2. Calculating vertex and index data and storing in array
+* 3. Passing transformation and position data to the shader
+* 4. Rendering each object in the scene 
 * 
 */
 
